@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_SPREADSHEET_ID = "1FvWVKQbRZpHtHS-30tr4lhPYNCC9QH8K0cIcbfd9wgU";
 const DEFAULT_RANGE = "InProgress";
 const DEFAULT_WEBAPP_URL =
-  "https://script.google.com/macros/s/AKfycbwRZlRSwHfwHUu_NrYQNeh6XOphstn5EJ-Rh9dqC6rj_fHW1t7CIqWJeSKAeUpWsxZT/exec";
+  "https://script.google.com/macros/s/AKfycbzqbwuSC6ZF07PTXSlOayDymYlgNV4MVftHTPdm-fZvseWjopiqic9oq0TSuvbpa5cV/exec";
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
 function base64UrlEncode(value) {
