@@ -185,11 +185,16 @@ async function fetchWebAppText(urlString) {
   }
 }
 
-async function updateViaWebApp({ value }) {
+async function callWebApp(params = {}) {
   const webAppUrl = process.env.GOOGLE_SHEETS_WEBAPP_URL || DEFAULT_WEBAPP_URL;
-
   const url = new URL(webAppUrl);
-  url.searchParams.set("value", String(value));
+
+  for (const [key, paramValue] of Object.entries(params)) {
+    if (paramValue !== undefined && paramValue !== null) {
+      url.searchParams.set(key, String(paramValue));
+    }
+  }
+
   const text = await fetchWebAppText(url.toString());
 
   try {
@@ -199,12 +204,16 @@ async function updateViaWebApp({ value }) {
   }
 }
 
+async function updateViaWebApp({ value, action = "set_inprogress" }) {
+  return callWebApp({ action, value });
+}
+
 export async function setInProgress(value = 1) {
   const spreadsheetId =
     process.env.GOOGLE_SPREADSHEET_ID || DEFAULT_SPREADSHEET_ID;
   const range = process.env.GOOGLE_IN_PROGRESS_RANGE || DEFAULT_RANGE;
 
-  const webAppResult = await updateViaWebApp({ value });
+  const webAppResult = await updateViaWebApp({ value, action: "set_inprogress" });
   if (webAppResult) {
     return { method: "webapp", spreadsheetId, range, value, result: webAppResult };
   }
@@ -221,4 +230,25 @@ export async function setInProgress(value = 1) {
   });
 
   return { method: "service-account", spreadsheetId, range, value, result: apiResult };
+}
+
+export async function updateTarget(value) {
+  const spreadsheetId =
+    process.env.GOOGLE_SPREADSHEET_ID || DEFAULT_SPREADSHEET_ID;
+
+  const webAppResult = await callWebApp({
+    action: "update_target",
+    value,
+  });
+
+  if (webAppResult?.success === false) {
+    throw new Error(webAppResult.error || "Failed to update target in Google Sheet.");
+  }
+
+  return {
+    method: "webapp",
+    spreadsheetId,
+    value,
+    result: webAppResult,
+  };
 }

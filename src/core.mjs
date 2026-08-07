@@ -1,6 +1,6 @@
-import { setInProgress } from "./google-sheets.mjs";
+import { setInProgress, updateTarget } from "./google-sheets.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.0.0" };
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.1.0" };
 export const PROTOCOL_VERSION = "2024-11-05";
 
 const ALERT_MESSAGE = `Alert condition triggered - Expense Plan Exceeds Target
@@ -16,16 +16,54 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name: "update_target",
+    description:
+      "Update Target. Accepts a new target value, then clears the Trigger and InProgress named ranges in the Google Sheet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        Value: {
+          type: "number",
+          description: "The new target value.",
+        },
+      },
+      required: ["Value"],
+    },
+  },
 ];
 
 function textResult(text) {
   return { content: [{ type: "text", text }] };
 }
 
-async function handleToolCall(name) {
+function readTargetValue(args) {
+  const value = args?.Value ?? args?.value;
+  if (value === undefined || value === null || value === "") {
+    throw new Error("Value is required and must be a number.");
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    throw new Error("Value must be a valid number.");
+  }
+
+  return numericValue;
+}
+
+async function handleToolCall(name, args = {}) {
   if (name === "get_alert_message") {
     await setInProgress(1);
     return textResult(ALERT_MESSAGE);
+  }
+
+  if (name === "update_target") {
+    const value = readTargetValue(args);
+    const result = await updateTarget(value);
+
+    return textResult(
+      `Target updated to ${value}. Cleared Trigger and InProgress.\n${JSON.stringify(result.result)}`,
+    );
   }
 
   return {
@@ -48,7 +86,7 @@ export async function handleRequest(message) {
         },
         serverInfo: SERVER_INFO,
         instructions:
-          "Detect & Alert monitors planning conditions. Use get_alert_message when an expense-plan alert should be raised.",
+          "Detect & Alert monitors planning conditions. Use get_alert_message when an expense-plan alert should be raised. Use update_target to set a new target value and clear Trigger and InProgress.",
       },
     };
   }
@@ -71,8 +109,9 @@ export async function handleRequest(message) {
 
   if (method === "tools/call") {
     const toolName = params?.name;
+    const toolArgs = params?.arguments ?? {};
     try {
-      const result = await handleToolCall(toolName);
+      const result = await handleToolCall(toolName, toolArgs);
       return {
         jsonrpc: "2.0",
         id,
