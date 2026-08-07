@@ -1,4 +1,5 @@
 import { setInProgress, updateTarget } from "./google-sheets.mjs";
+import { resolveTargetWriteIds, writeExpenseTarget } from "./planning-mcp-client.mjs";
 import {
   getTriggerMonitorStatus,
   runTriggerCheck,
@@ -7,7 +8,7 @@ import {
   stopTriggerMonitor,
 } from "./trigger-monitor.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.1" };
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.3" };
 export const PROTOCOL_VERSION = "2024-11-05";
 
 const ALERT_MESSAGE = `Alert condition triggered - Expense Plan Exceeds Target
@@ -26,7 +27,7 @@ const TOOLS = [
   {
     name: "update_target",
     description:
-      "Update Target. Accepts a new target value, then clears the Trigger and InProgress named ranges in the Google Sheet.",
+      "Update Target. Reads existing monthly Expense_Target values for FY2027, prorates the new annual target across those months, writes them back to Adaptive Planning (Scenario 1 / Working Budget, Total Company (Only)), then updates the Google Sheet Target range and clears Trigger and InProgress.",
     inputSchema: {
       type: "object",
       properties: {
@@ -122,10 +123,12 @@ async function handleToolCall(name, args = {}) {
 
   if (name === "update_target") {
     const value = readTargetValue(args);
+    const ids = await resolveTargetWriteIds();
+    const planningResult = await writeExpenseTarget(value, ids);
     const result = await updateTarget(value);
 
     return textResult(
-      `Target updated to ${value}. Cleared Trigger and InProgress.\n${JSON.stringify(result.result)}`,
+      `Target updated to ${value} in Adaptive Planning and Google Sheet. Cleared Trigger and InProgress.\n${JSON.stringify({ planning: planningResult, sheet: result.result })}`,
     );
   }
 
@@ -173,7 +176,7 @@ export async function handleRequest(message) {
         },
         serverInfo: SERVER_INFO,
         instructions:
-          "Detect & Alert monitors planning conditions. Use get_alert_message when an expense-plan alert should be raised. Use update_target to set a new target value and clear Trigger and InProgress. Use start_trigger_check, stop_trigger_check, and set_check_interval to control the periodic Adaptive Planning monitor.",
+          "Detect & Alert monitors planning conditions. Use get_alert_message when an expense-plan alert should be raised. Use update_target to prorate a new annual target across monthly Expense_Target values in Adaptive Planning and clear Trigger and InProgress in the Google Sheet. Use start_trigger_check, stop_trigger_check, and set_check_interval to control the periodic Adaptive Planning monitor.",
       },
     };
   }

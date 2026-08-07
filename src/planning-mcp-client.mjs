@@ -188,6 +188,370 @@ function findVersionOrScenarioId(searchResults, keyword) {
   );
 }
 
+function findMetadataMatch(searchResults, keyword, metadataType) {
+  const dimension = searchResults.find((entry) => entry.metadata_type === metadataType);
+  if (dimension?.values?.length) {
+    const normalizedKeyword = normalizeLabel(keyword);
+    const match = dimension.values.find((value) => {
+      const candidates = [value.name, value.code];
+      return candidates.some((candidate) => normalizeLabel(candidate) === normalizedKeyword);
+    });
+
+    if (match) {
+      return match;
+    }
+  }
+
+  const flatMatch = searchResults
+    .flatMap((item) => item.results || [])
+    .find(
+      (result) =>
+        result.metadata_type === metadataType &&
+        normalizeLabel(result.name || result.code || "").includes(normalizeLabel(keyword)),
+    );
+
+  if (flatMatch) {
+    return flatMatch;
+  }
+
+  return null;
+}
+
+function parseOnlyLevel(levelName) {
+  const match = String(levelName || "").match(/^(.+?)\s*\((only|uncategorized)\)\s*$/i);
+  if (!match) {
+    return { baseLevel: levelName, useOnlySlot: false };
+  }
+
+  return { baseLevel: match[1].trim(), useOnlySlot: true };
+}
+
+function levelIdForWrite(levelMatch, { useOnlySlot = false } = {}) {
+  if (!levelMatch?.id) {
+    return null;
+  }
+
+  if (useOnlySlot || levelMatch.has_children) {
+    return `-${levelMatch.id}`;
+  }
+
+  return String(levelMatch.id);
+}
+
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function fiscalYearFromTimeLabel(timeLabel) {
+  const match = String(timeLabel || "").match(/(\d{4})/);
+  if (!match) {
+    throw new Error(`Could not parse fiscal year from time label: ${timeLabel}`);
+  }
+
+  return Number(match[1]);
+}
+
+function monthLabelsForFiscalYear(year) {
+  return MONTH_NAMES.map((month) => `${month} ${year}`);
+}
+
+async function resolveMonthlyTimeIds(timeLabel) {
+  const year = fiscalYearFromTimeLabel(timeLabel);
+  const labels = monthLabelsForFiscalYear(year);
+  const searchResults = await searchPlanningMetadata(labels);
+  const timeDimension = searchResults.find((entry) => entry.metadata_type === 3);
+
+  if (!timeDimension?.values?.length) {
+    throw new Error(`Could not resolve monthly time periods for ${timeLabel}.`);
+  }
+
+  const months = labels.map((label) => {
+    const match = timeDimension.values.find((value) => value.name === label);
+    if (!match?.id) {
+      throw new Error(`Could not resolve monthly time period: ${label}`);
+    }
+
+    return {
+      label,
+      timeId: String(match.id),
+    };
+  });
+
+  return months;
+}
+
+function timeCoordinateFromRow(row) {
+  return (row.coordinates || []).find(
+    (coordinate) =>
+      coordinate.dimensionType === "time" ||
+      coordinate.type === "time" ||
+      coordinate.dimensionName === "Time",
+  );
+}
+
+function parsePlanningQueryPayload(text) {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Unable to parse planning query response: ${text.slice(0, 300)}`);
+  }
+}
+
+export async function fetchMonthlyTargetValues(ids, monthlyTimeIds) {
+  const result = await callPlanningTool("data-dimensional-query", {
+    request: {
+      options: {
+        suppressZeroes: 0,
+        includeLabels: true,
+        includeElementCode: true,
+      },
+      axes: [
+        {
+          type: "X",
+          segments: [
+            {
+              tiers: [
+                {
+                  type: "account",
+                  elements: [{ id: String(ids.accountId) }],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "Y",
+          segments: [
+            {
+              tiers: [
+                {
+                  type: "time",
+                  elements: monthlyTimeIds.map((month) => ({ id: month.timeId })),
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "FILTER",
+          segments: [
+            {
+              tiers: [
+                {
+                  type: "version",
+                  elements: [{ id: String(ids.versionId) }],
+                },
+                {
+                  type: "level",
+                  elements: [{ id: String(ids.levelId) }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  const payload = parsePlanningQueryPayload(toolText(result));
+  const rows = payload?.reportData?.rows || payload?.rows || [];
+  const valuesByTimeId = new Map();
+
+  for (const row of rows) {
+    const timeCoordinate = timeCoordinateFromRow(row);
+    const timeId = timeCoordinate?.elementId ? String(timeCoordinate.elementId) : null;
+    if (!timeId) {
+      continue;
+    }
+
+    valuesByTimeId.set(timeId, parseNumericValue(row.cells?.[0]?.value ?? row.cells?.[0]?.formatted));
+  }
+
+  return monthlyTimeIds.map((month) => ({
+    ...month,
+    value: valuesByTimeId.get(month.timeId) ?? 0,
+  }));
+}
+
+export function prorateMonthlyValues(monthlyValues, newTarget) {
+  if (!Array.isArray(monthlyValues) || monthlyValues.length === 0) {
+    throw new Error("No monthly values available to prorate.");
+  }
+
+  const numericTarget = Number(newTarget);
+  if (!Number.isFinite(numericTarget)) {
+    throw new Error("New target value must be a valid number.");
+  }
+
+  const priorTotal = monthlyValues.reduce((sum, month) => sum + month.value, 0);
+  let prorated;
+
+  if (priorTotal === 0) {
+    const evenValue = Math.floor(numericTarget / monthlyValues.length);
+    prorated = monthlyValues.map((month, index) => ({
+      ...month,
+      value:
+        index === monthlyValues.length - 1
+          ? numericTarget - evenValue * (monthlyValues.length - 1)
+          : evenValue,
+    }));
+  } else {
+    prorated = monthlyValues.map((month) => ({
+      ...month,
+      value: Math.round((numericTarget * month.value) / priorTotal),
+    }));
+
+    const roundingDiff = numericTarget - prorated.reduce((sum, month) => sum + month.value, 0);
+    prorated[prorated.length - 1].value += roundingDiff;
+  }
+
+  return {
+    priorTotal,
+    newTotal: numericTarget,
+    prorated,
+  };
+}
+
+export function buildProratedTargetWriteRequest(proratedMonths, ids) {
+  return {
+    dimensionSets: [
+      {
+        dimension: { typeId: "-9", code: "Currency" },
+        dimensionMembers: [{ id: String(ids.currencyId) }],
+      },
+      {
+        dimension: { typeId: "-4", code: "Version" },
+        dimensionMembers: [{ id: String(ids.versionId) }],
+      },
+      {
+        dimension: { typeId: "-3", code: "Time" },
+        dimensionMembers: proratedMonths.map((month) => ({ id: String(month.timeId) })),
+      },
+      {
+        dimension: { typeId: "-2", code: "Account" },
+        dimensionMembers: [{ id: String(ids.accountId) }],
+      },
+      {
+        dimension: { typeId: "-1", code: "Level" },
+        dimensionMembers: [{ id: String(ids.levelWriteId) }],
+      },
+    ],
+    indexedCoordinates: proratedMonths.map((month, index) => ({
+      c: [0, 0, index, 0, 0],
+      v: String(month.value),
+    })),
+  };
+}
+
+export function buildTargetWriteRequest(value, ids) {
+  return {
+    dimensionSets: [
+      {
+        dimension: { typeId: "-9", code: "Currency" },
+        dimensionMembers: [{ id: String(ids.currencyId) }],
+      },
+      {
+        dimension: { typeId: "-4", code: "Version" },
+        dimensionMembers: [{ id: String(ids.versionId) }],
+      },
+      {
+        dimension: { typeId: "-3", code: "Time" },
+        dimensionMembers: [{ id: String(ids.timeId) }],
+      },
+      {
+        dimension: { typeId: "-2", code: "Account" },
+        dimensionMembers: [{ id: String(ids.accountId) }],
+      },
+      {
+        dimension: { typeId: "-1", code: "Level" },
+        dimensionMembers: [{ id: String(ids.levelWriteId) }],
+      },
+    ],
+    indexedCoordinates: [{ c: [0, 0, 0, 0, 0], v: String(value) }],
+  };
+}
+
+export async function resolveTargetWriteIds({
+  account = process.env.PLANNING_TARGET_ACCOUNT || "Expense_Target",
+  version = process.env.PLANNING_VERSION || "Scenario 1",
+  time = process.env.PLANNING_TIME || "FY2027",
+  level =
+    process.env.PLANNING_WRITE_LEVEL ||
+    process.env.PLANNING_LEVEL ||
+    "Total Company (Only)",
+  currencyId = process.env.PLANNING_CURRENCY_ID || "15400",
+} = {}) {
+  const { baseLevel, useOnlySlot } = parseOnlyLevel(level);
+  const searchResults = await searchPlanningMetadata([account, version, time, baseLevel]);
+
+  const accountMatch = findMetadataMatch(searchResults, account, 2);
+  const levelMatch = findMetadataMatch(searchResults, baseLevel, 1);
+  const ids = {
+    accountId: accountMatch?.id ?? null,
+    versionId: findVersionOrScenarioId(searchResults, version),
+    timeId: findMetadataId(searchResults, time, 3),
+    levelId: levelMatch?.id ?? null,
+    levelWriteId: levelIdForWrite(levelMatch, { useOnlySlot }),
+    levelLabel: level,
+    currencyId,
+  };
+
+  const missing = [
+    ["account", account, ids.accountId],
+    ["versionOrScenario", version, ids.versionId],
+    ["time", time, ids.timeId],
+    ["level", level, ids.levelId],
+    ["levelWriteId", level, ids.levelWriteId],
+  ]
+    .filter(([, , id]) => !id)
+    .map(([key]) => key);
+
+  if (missing.length > 0) {
+    throw new Error(`Could not resolve planning metadata for: ${missing.join(", ")}`);
+  }
+
+  return ids;
+}
+
+export async function writeExpenseTarget(value, ids) {
+  const timeLabel = process.env.PLANNING_TIME || "FY2027";
+  const monthlyTimeIds = await resolveMonthlyTimeIds(timeLabel);
+  const monthlyValues = await fetchMonthlyTargetValues(ids, monthlyTimeIds);
+  const { priorTotal, newTotal, prorated } = prorateMonthlyValues(monthlyValues, value);
+  const writeRequest = buildProratedTargetWriteRequest(prorated, ids);
+  const result = await callPlanningTool("data-dimensional-write", {
+    writeRequestPayload: JSON.stringify(writeRequest),
+  });
+  const text = toolText(result);
+
+  if (!text || /error writing hypercube data/i.test(text)) {
+    throw new Error(text || "Planning write returned an empty response.");
+  }
+
+  return {
+    writeRequest,
+    response: text,
+    priorTotal,
+    newTotal,
+    monthlyValues: prorated,
+  };
+}
+
 export async function resolveTriggerQueryIds({
   parentAccount = process.env.PLANNING_PARENT_ACCOUNT || "Detect & Alert Triggers",
   version = process.env.PLANNING_VERSION || "Scenario 1",

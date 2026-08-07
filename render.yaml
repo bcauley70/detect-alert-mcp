@@ -23,3 +23,9 @@ services:
         value: Total Company
       - key: PLANNING_VERSION
         value: Scenario 1
+      - key: PLANNING_TIME
+        value: FY2027
+      - key: PLANNING_TARGET_ACCOUNT
+        value: Expense_Target
+      - key: PLANNING_WRITE_LEVEL
+        value: Total Company (Only)
