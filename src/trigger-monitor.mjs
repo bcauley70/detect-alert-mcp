@@ -160,8 +160,25 @@ export function setTriggerCheckInterval(seconds) {
 }
 
 export function maybeAutostartTriggerMonitor() {
-  const autostart = String(process.env.TRIGGER_CHECK_AUTOSTART || "").toLowerCase();
-  if (autostart === "true" || autostart === "1" || autostart === "yes") {
-    startTriggerMonitor();
+  const autostartSetting = String(process.env.TRIGGER_CHECK_AUTOSTART ?? "").toLowerCase();
+  const transport = String(process.env.MCP_TRANSPORT || "stdio").toLowerCase();
+  const disabled =
+    autostartSetting === "false" ||
+    autostartSetting === "0" ||
+    autostartSetting === "no";
+  const enabled =
+    autostartSetting === "true" ||
+    autostartSetting === "1" ||
+    autostartSetting === "yes" ||
+    (autostartSetting === "" && transport === "http");
+
+  if (disabled || !enabled) {
+    return getTriggerMonitorStatus();
   }
+
+  process.stderr.write(
+    `[trigger-monitor] Autostarting trigger check (${state.intervalSeconds}s interval).\n`,
+  );
+
+  return startTriggerMonitor();
 }

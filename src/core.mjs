@@ -13,7 +13,7 @@ import {
   stopTriggerMonitor,
 } from "./trigger-monitor.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.5" };
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.6" };
 export const PROTOCOL_VERSION = "2024-11-05";
 
 function formatAlertAmount(value) {

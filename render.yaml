@@ -19,6 +19,8 @@ services:
         value: klWMOkQ9F4deCBmG4LIw8+0E5H5jNZI0vhaACzGo+/U=
       - key: TRIGGER_CHECK_INTERVAL_SECONDS
         value: "60"
+      - key: TRIGGER_CHECK_AUTOSTART
+        value: "true"
       - key: PLANNING_LEVEL
         value: Total Company
       - key: PLANNING_VERSION
