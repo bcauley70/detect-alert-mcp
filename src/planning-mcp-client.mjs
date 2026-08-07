@@ -181,6 +181,13 @@ function findMetadataId(searchResults, keyword, metadataType) {
   return match?.id ?? null;
 }
 
+function findVersionOrScenarioId(searchResults, keyword) {
+  return (
+    findMetadataId(searchResults, keyword, 4) ||
+    findMetadataId(searchResults, keyword, 15)
+  );
+}
+
 export async function resolveTriggerQueryIds({
   parentAccount = process.env.PLANNING_PARENT_ACCOUNT || "Detect & Alert Triggers",
   version = process.env.PLANNING_VERSION || "Scenario 1",
@@ -196,14 +203,14 @@ export async function resolveTriggerQueryIds({
 
   const ids = {
     parentAccountId: findMetadataId(searchResults, parentAccount, 2),
-    versionId: findMetadataId(searchResults, version, 4),
+    versionId: findVersionOrScenarioId(searchResults, version),
     timeId: findMetadataId(searchResults, time, 3),
     levelId: findMetadataId(searchResults, level, 1),
   };
 
   const missing = [
     ["parentAccount", parentAccount, ids.parentAccountId],
-    ["version", version, ids.versionId],
+    ["versionOrScenario", version, ids.versionId],
     ["time", time, ids.timeId],
     ["level", level, ids.levelId],
   ]

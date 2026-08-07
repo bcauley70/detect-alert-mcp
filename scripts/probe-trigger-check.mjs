@@ -64,7 +64,7 @@ function findId(keyword, metadataType) {
 }
 
 const parentAccountId = findId("Detect_and_Alert_Triggers", 2);
-const versionId = findId("Scenario 1", 4);
+const versionId = findId("Scenario 1", 4) || findId("Scenario 1", 15);
 const timeId = findId("FY2027", 3);
 const levelId = findId("Total Company", 1);
 
