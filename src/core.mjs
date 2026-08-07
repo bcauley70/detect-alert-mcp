@@ -1,5 +1,6 @@
 import { getTrigger, setInProgress, updateTarget } from "./google-sheets.mjs";
 import {
+  buildTargetUpdateAnalysis,
   fetchAlertAccountValues,
   resolveTargetWriteIds,
   writeExpenseTarget,
@@ -12,7 +13,7 @@ import {
   stopTriggerMonitor,
 } from "./trigger-monitor.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.4" };
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.5" };
 export const PROTOCOL_VERSION = "2024-11-05";
 
 function formatAlertAmount(value) {
@@ -42,7 +43,7 @@ const TOOLS = [
   {
     name: "update_target",
     description:
-      "Update Target. Reads existing monthly Expense_Target values for FY2027, prorates the new annual target across those months, writes them back to Adaptive Planning (Scenario 1 / Working Budget, Total Company (Only)), then updates the Google Sheet Target range and clears Trigger and InProgress.",
+      "Update Target. Reads existing monthly Expense_Target values for FY2027, prorates the new annual target across those months, writes them back to Adaptive Planning (Scenario 1 / Working Budget, Total Company (Only)), updates the Google Sheet Target range, clears Trigger and InProgress, and returns a short analysis of what changed.",
     inputSchema: {
       type: "object",
       properties: {
@@ -149,9 +150,17 @@ async function handleToolCall(name, args = {}) {
     const ids = await resolveTargetWriteIds();
     const planningResult = await writeExpenseTarget(value, ids);
     const result = await updateTarget(value);
+    const analysis = await buildTargetUpdateAnalysis(planningResult, ids);
 
     return textResult(
-      `Target updated to ${value} in Adaptive Planning and Google Sheet. Cleared Trigger and InProgress.\n${JSON.stringify({ planning: planningResult, sheet: result.result })}`,
+      [
+        `Target updated to ${value} in Adaptive Planning and Google Sheet. Cleared Trigger and InProgress.`,
+        "",
+        "Analysis:",
+        analysis,
+        "",
+        JSON.stringify({ planning: planningResult, sheet: result.result }),
+      ].join("\n"),
     );
   }
 

@@ -548,6 +548,7 @@ export async function writeExpenseTarget(value, ids) {
     response: text,
     priorTotal,
     newTotal,
+    priorMonthlyValues: monthlyValues,
     monthlyValues: prorated,
   };
 }
@@ -753,6 +754,182 @@ export async function fetchAlertAccountValues({
     operatingExpenses: values.operatingExpenses ?? 0,
     expenseTarget: values.expenseTarget ?? 0,
   };
+}
+
+function formatPlanningAmount(value) {
+  return Math.round(Number(value)).toLocaleString("en-US");
+}
+
+function formatPercentChange(priorTotal, newTotal) {
+  if (!priorTotal) {
+    return "n/a";
+  }
+
+  const pct = ((newTotal - priorTotal) / priorTotal) * 100;
+  const sign = pct >= 0 ? "+" : "";
+  return `${sign}${pct.toFixed(1)}%`;
+}
+
+function summarizeLargestMonthlyChange(priorMonthlyValues, monthlyValues) {
+  if (!priorMonthlyValues?.length || !monthlyValues?.length) {
+    return null;
+  }
+
+  const changes = monthlyValues.map((month, index) => ({
+    label: month.label,
+    delta: month.value - (priorMonthlyValues[index]?.value ?? 0),
+  }));
+
+  if (!changes.length) {
+    return null;
+  }
+
+  return changes.reduce((largest, change) =>
+    Math.abs(change.delta) > Math.abs(largest.delta) ? change : largest,
+  );
+}
+
+function formatVarianceLine(item) {
+  if (item?.variance !== undefined && item?.variance !== null) {
+    const coordinates =
+      item.coordinates && typeof item.coordinates === "object"
+        ? Object.entries(item.coordinates)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(", ")
+        : String(item.coordinates || "variance cell");
+
+    return `${coordinates} — ${formatPlanningAmount(item.variance)}`;
+  }
+
+  if (item?.accountName || item?.elementName) {
+    const label = item.accountName || item.elementName;
+    const amount = item.variance ?? item.value ?? item.amount;
+    return `${label} — ${formatPlanningAmount(amount)}`;
+  }
+
+  return JSON.stringify(item);
+}
+
+async function tryGetTopVariances({
+  versionId,
+  baseVersionId,
+  timeId,
+  levelId,
+  accountIds,
+}) {
+  if (!versionId || !baseVersionId || !timeId || !levelId || !accountIds?.length) {
+    return null;
+  }
+
+  try {
+    const result = await callPlanningTool("get_top_variances", {
+      relevantDimensionDetails: [
+        {
+          dimensionKey: { id: -2, type: "ACCOUNT" },
+          dimensionName: "Account",
+          members: accountIds.map((id) => ({ id: Number(id), isUncat: false })),
+          operators: [],
+        },
+        {
+          dimensionKey: { id: -1, type: "LEVEL" },
+          dimensionName: "Level",
+          members: [{ id: Number(levelId), isUncat: false }],
+          operators: [],
+        },
+        {
+          dimensionKey: { id: -3, type: "TIME" },
+          dimensionName: "Time",
+          members: [{ id: Number(timeId), isUncat: false }],
+          operators: [],
+        },
+        {
+          dimensionKey: { id: -4, type: "VERSION" },
+          dimensionName: "Version",
+          members: [
+            { id: Number(versionId), isUncat: false },
+            { id: Number(baseVersionId), isUncat: false },
+          ],
+          operators: [],
+        },
+      ],
+      topN: 3,
+      thresholdValue: 1000,
+    });
+    const text = toolText(result);
+    if (!text) {
+      return null;
+    }
+
+    const payload = JSON.parse(text);
+    if (!payload.success) {
+      return null;
+    }
+
+    return payload.varianceData || payload;
+  } catch {
+    return null;
+  }
+}
+
+export async function buildTargetUpdateAnalysis(planningResult, ids) {
+  const lines = [];
+  const {
+    priorTotal,
+    newTotal,
+    priorMonthlyValues,
+    monthlyValues,
+  } = planningResult;
+  const delta = newTotal - priorTotal;
+  const deltaLabel = `${delta >= 0 ? "+" : ""}${formatPlanningAmount(delta)}`;
+
+  lines.push(
+    `Expense_Target FY total: ${formatPlanningAmount(priorTotal)} -> ${formatPlanningAmount(newTotal)} (${deltaLabel}, ${formatPercentChange(priorTotal, newTotal)}).`,
+  );
+  lines.push(
+    `Prorated ${monthlyValues.length} monthly values in ${process.env.PLANNING_VERSION || "Scenario 1"} at ${ids.levelLabel}.`,
+  );
+
+  const largestChange = summarizeLargestMonthlyChange(priorMonthlyValues, monthlyValues);
+  if (largestChange) {
+    const sign = largestChange.delta >= 0 ? "+" : "";
+    lines.push(
+      `Largest monthly change: ${largestChange.label} (${sign}${formatPlanningAmount(largestChange.delta)}).`,
+    );
+  }
+
+  const accounts = await fetchAlertAccountValues();
+  const gap = accounts.operatingExpenses - accounts.expenseTarget;
+  const gapLabel = gap > 0 ? "over target" : gap < 0 ? "under target" : "on target";
+  lines.push(
+    `Current plan vs target: ${formatPlanningAmount(accounts.operatingExpenses)} operating expenses vs ${formatPlanningAmount(accounts.expenseTarget)} target (${formatPlanningAmount(Math.abs(gap))} ${gapLabel}).`,
+  );
+
+  const baseVersion = process.env.PLANNING_BASE_VERSION || "Working Budget";
+  const operatingAccount =
+    process.env.PLANNING_OPERATING_EXPENSES_ACCOUNT || "6000_Operating_Expenses";
+  const metadata = await searchPlanningMetadata([baseVersion, operatingAccount]);
+  const baseVersionId = findVersionOrScenarioId(metadata, baseVersion);
+  const operatingAccountId = findMetadataId(metadata, operatingAccount, 2);
+  const variances = await tryGetTopVariances({
+    versionId: ids.versionId,
+    baseVersionId,
+    timeId: ids.timeId,
+    levelId: ids.levelId,
+    accountIds: [operatingAccountId, ids.accountId].filter(Boolean),
+  });
+
+  if (variances?.variances?.length) {
+    lines.push("Top variances (Scenario 1 vs Working Budget):");
+    for (const item of variances.variances.slice(0, 3)) {
+      lines.push(`- ${formatVarianceLine(item)}`);
+    }
+  } else {
+    lines.push(
+      "Variance reporting is unavailable on this tenant; analysis uses the updated target totals and current plan values.",
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function accountNameFromColumn(column) {
