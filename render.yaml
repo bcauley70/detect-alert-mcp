@@ -36,4 +36,4 @@ services:
       - key: PLANNING_BASE_VERSION
         value: Working Budget
       - key: PLANNING_VARIANCE_REPORT_URL
-        value: http://livec50a03.adaptiveplanning.com/report-viewer?id=1506&zx=MTE4OCAxIDEgLTEgMCAtMSAtOTkgNTdFNzdENEQ3RThBNDcwRTgyNTk0RkQyNkQ5QTMxMkYgREVNT19HQVJUTkVSXzIwMjZWMiAwIDAgLTEgZmFsc2UgbnVsbCBmYWxzZSAtMSAtMSAwIDAgMA==
+        value: https://livec50a03.adaptiveplanning.com/adaptivepro/configuration/libraries/reports?src=%2Fmatrix-report-viewer%2F1506%2FM%3FreportId%3D1506%26reportType%3DM%26outputType%3DH%26reportKey%3Df56fb2b0-42cf-465b-b9e5-1fd455bc11ad
