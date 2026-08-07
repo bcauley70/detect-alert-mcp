@@ -97,13 +97,53 @@ export async function searchPlanningMetadata(keywords) {
   }
 
   try {
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+
+    if (Array.isArray(parsed.matched_dimensions_or_values)) {
+      return parsed.matched_dimensions_or_values;
+    }
+
+    return [];
   } catch {
     throw new Error(`Unable to parse metadata search response: ${text.slice(0, 300)}`);
   }
 }
 
+function normalizeLabel(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[_\s]+/g, "");
+}
+
+function findValueInDimensionEntries(entries, metadataType, label) {
+  const dimension = entries.find((entry) => entry.metadata_type === metadataType);
+  if (!dimension?.values?.length) {
+    return null;
+  }
+
+  const normalizedLabel = normalizeLabel(label);
+  const match = dimension.values.find((value) => {
+    const candidates = [value.name, value.code];
+    return candidates.some((candidate) => normalizeLabel(candidate) === normalizedLabel);
+  });
+
+  return match?.id ?? null;
+}
+
 function findMetadataId(searchResults, keyword, metadataType) {
+  const fromDimensions = findValueInDimensionEntries(
+    searchResults,
+    metadataType,
+    keyword,
+  );
+  if (fromDimensions) {
+    return fromDimensions;
+  }
+
   const entry = searchResults.find(
     (item) =>
       String(item.keyword || "").toLowerCase() === keyword.toLowerCase() &&
@@ -117,16 +157,16 @@ function findMetadataId(searchResults, keyword, metadataType) {
       .find(
         (result) =>
           result.metadata_type === metadataType &&
-          String(result.name || result.code || "")
-            .toLowerCase()
-            .includes(keyword.toLowerCase()),
+          normalizeLabel(result.name || result.code || "").includes(
+            normalizeLabel(keyword),
+          ),
       );
 
   return match?.id ?? null;
 }
 
 export async function resolveTriggerQueryIds({
-  parentAccount = process.env.PLANNING_PARENT_ACCOUNT || "Detect_and_Alert_Triggers",
+  parentAccount = process.env.PLANNING_PARENT_ACCOUNT || "Detect & Alert Triggers",
   version = process.env.PLANNING_VERSION || "Working Budget",
   time = process.env.PLANNING_TIME || "FY2027",
   level = process.env.PLANNING_LEVEL || "Top Level",
