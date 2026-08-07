@@ -1,0 +1,16 @@
+{
+  "name": "detect-alert-mcp",
+  "version": "1.0.0",
+  "description": "Detect & Alert MCP server with Get Alert Message tool",
+  "type": "module",
+  "bin": {
+    "detect-alert-mcp": "./src/index.mjs"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test:tool": "node scripts/test-get-alert-message.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

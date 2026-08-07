@@ -1,0 +1,11 @@
+services:
+  detect-alert-mcp:
+    build: .
+    ports:
+      - "3001:3000"
+    environment:
+      MCP_TRANSPORT: http
+      PORT: 3000
+      HOST: 0.0.0.0
+      MCP_API_KEY: ${MCP_API_KEY:-change-me-before-deploy}
+      GOOGLE_SHEETS_WEBAPP_URL: ${GOOGLE_SHEETS_WEBAPP_URL:-https://script.google.com/macros/s/AKfycbwRZlRSwHfwHUu_NrYQNeh6XOphstn5EJ-Rh9dqC6rj_fHW1t7CIqWJeSKAeUpWsxZT/exec}
