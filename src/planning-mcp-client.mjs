@@ -183,9 +183,9 @@ function findMetadataId(searchResults, keyword, metadataType) {
 
 export async function resolveTriggerQueryIds({
   parentAccount = process.env.PLANNING_PARENT_ACCOUNT || "Detect & Alert Triggers",
-  version = process.env.PLANNING_VERSION || "Working Budget",
+  version = process.env.PLANNING_VERSION || "Scenario 1",
   time = process.env.PLANNING_TIME || "FY2027",
-  level = process.env.PLANNING_LEVEL || "Top Level",
+  level = process.env.PLANNING_LEVEL || "Total Company",
 } = {}) {
   const searchResults = await searchPlanningMetadata([
     parentAccount,

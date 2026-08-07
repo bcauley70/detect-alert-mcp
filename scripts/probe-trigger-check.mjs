@@ -40,9 +40,9 @@ const search = await mcpCall(
     arguments: {
       keywords: [
         "Detect_and_Alert_Triggers",
-        "Working Budget",
+        "Scenario 1",
         "FY2027",
-        "Top Level",
+        "Total Company",
       ],
     },
   },
@@ -64,9 +64,9 @@ function findId(keyword, metadataType) {
 }
 
 const parentAccountId = findId("Detect_and_Alert_Triggers", 2);
-const versionId = findId("Working Budget", 4);
+const versionId = findId("Scenario 1", 4);
 const timeId = findId("FY2027", 3);
-const levelId = findId("Top Level", 1);
+const levelId = findId("Total Company", 1);
 
 console.log({ parentAccountId, versionId, timeId, levelId });
 
