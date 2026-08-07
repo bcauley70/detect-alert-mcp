@@ -35,3 +35,5 @@ services:
         value: Total Company (Only)
       - key: PLANNING_BASE_VERSION
         value: Working Budget
+      - key: PLANNING_VARIANCE_REPORT_URL
+        value: http://livec50a03.adaptiveplanning.com/report-viewer?id=1506&zx=MTE4OCAxIDEgLTEgMCAtMSAtOTkgNTdFNzdENEQ3RThBNDcwRTgyNTk0RkQyNkQ5QTMxMkYgREVNT19HQVJUTkVSXzIwMjZWMiAwIDAgLTEgZmFsc2UgbnVsbCBmYWxzZSAtMSAtMSAwIDAgMA==

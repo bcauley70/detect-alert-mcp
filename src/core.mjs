@@ -13,7 +13,11 @@ import {
   stopTriggerMonitor,
 } from "./trigger-monitor.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.6" };
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.7" };
+
+const EXPENSE_ALERT_VARIANCE_REPORT_URL =
+  process.env.PLANNING_VARIANCE_REPORT_URL ||
+  "http://livec50a03.adaptiveplanning.com/report-viewer?id=1506&zx=MTE4OCAxIDEgLTEgMCAtMSAtOTkgNTdFNzdENEQ3RThBNDcwRTgyNTk0RkQyNkQ5QTMxMkYgREVNT19HQVJUTkVSXzIwMjZWMiAwIDAgLTEgZmFsc2UgbnVsbCBmYWxzZSAtMSAtMSAwIDAgMA==";
 export const PROTOCOL_VERSION = "2024-11-05";
 
 function formatAlertAmount(value) {
@@ -158,6 +162,9 @@ async function handleToolCall(name, args = {}) {
         "",
         "Analysis:",
         analysis,
+        "",
+        "Here's a report that summarizes the changes in your scenario vs. the original plan.",
+        `[Expense Alert Variance](${EXPENSE_ALERT_VARIANCE_REPORT_URL})`,
         "",
         JSON.stringify({ planning: planningResult, sheet: result.result }),
       ].join("\n"),
