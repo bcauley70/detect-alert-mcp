@@ -871,6 +871,102 @@ async function tryGetTopVariances({
   }
 }
 
+function extractXmlAttribute(attributes, name) {
+  const match = String(attributes || "").match(new RegExp(`\\b${name}="([^"]*)"`, "i"));
+  return match?.[1] ?? null;
+}
+
+export function parseReportSearchResults(xml) {
+  if (!xml || /success="false"/i.test(xml) || /Feature not enabled/i.test(xml)) {
+    return [];
+  }
+
+  const reports = [];
+  for (const match of xml.matchAll(/<report\b([^>/]*)(?:\/>|>)/gi)) {
+    const attributes = match[1];
+    const id = extractXmlAttribute(attributes, "id");
+    if (!id) {
+      continue;
+    }
+
+    reports.push({
+      id,
+      name: extractXmlAttribute(attributes, "name"),
+      reportKey: extractXmlAttribute(attributes, "reportKey"),
+    });
+  }
+
+  return reports;
+}
+
+function pickExpenseAlertVarianceReport(reports, reportName) {
+  const normalizedName = normalizeLabel(reportName);
+
+  return (
+    reports.find((report) => normalizeLabel(report.name) === normalizedName) ||
+    reports.find((report) => normalizeLabel(report.name || "").includes(normalizedName)) ||
+    reports[0] ||
+    null
+  );
+}
+
+export function buildMatrixReportViewerUrl({ instanceBaseUrl, reportId, reportKey }) {
+  const normalizedBase = String(instanceBaseUrl || "").replace(/\/$/, "");
+  const reportPath =
+    `/matrix-report-viewer/${reportId}/M?reportId=${reportId}` +
+    `&reportType=M&outputType=H` +
+    (reportKey ? `&reportKey=${reportKey}` : "");
+
+  return `${normalizedBase}/adaptivepro/configuration/libraries/reports?src=${encodeURIComponent(reportPath)}`;
+}
+
+export async function resolveExpenseAlertVarianceReportUrl() {
+  const overrideUrl = process.env.PLANNING_VARIANCE_REPORT_URL;
+  if (overrideUrl) {
+    return { url: overrideUrl, source: "env_override" };
+  }
+
+  const reportName = process.env.PLANNING_VARIANCE_REPORT_NAME || "Expense Alert Variance";
+  const instanceBaseUrl =
+    process.env.PLANNING_INSTANCE_URL || "https://livec50a03.adaptiveplanning.com";
+  const fallbackReportId = process.env.PLANNING_VARIANCE_REPORT_ID || "1506";
+  const fallbackReportKey =
+    process.env.PLANNING_VARIANCE_REPORT_KEY ||
+    "f56fb2b0-42cf-465b-b9e5-1fd455bc11ad";
+
+  try {
+    const result = await callPlanningTool("report_search", { searchTerm: reportName });
+    const reports = parseReportSearchResults(toolText(result));
+    const match = pickExpenseAlertVarianceReport(reports, reportName);
+
+    if (match?.id) {
+      return {
+        url: buildMatrixReportViewerUrl({
+          instanceBaseUrl,
+          reportId: match.id,
+          reportKey: match.reportKey || fallbackReportKey,
+        }),
+        source: "report_search",
+        reportId: match.id,
+        reportName: match.name || reportName,
+      };
+    }
+  } catch {
+    // Fall through to configured report metadata.
+  }
+
+  return {
+    url: buildMatrixReportViewerUrl({
+      instanceBaseUrl,
+      reportId: fallbackReportId,
+      reportKey: fallbackReportKey,
+    }),
+    source: "configured_metadata",
+    reportId: fallbackReportId,
+    reportName,
+  };
+}
+
 export async function buildTargetUpdateAnalysis(planningResult, ids) {
   const lines = [];
   const {

@@ -2,6 +2,7 @@ import { getTrigger, setInProgress, updateTarget } from "./google-sheets.mjs";
 import {
   buildTargetUpdateAnalysis,
   fetchAlertAccountValues,
+  resolveExpenseAlertVarianceReportUrl,
   resolveTargetWriteIds,
   writeExpenseTarget,
 } from "./planning-mcp-client.mjs";
@@ -13,11 +14,7 @@ import {
   stopTriggerMonitor,
 } from "./trigger-monitor.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.8" };
-
-const EXPENSE_ALERT_VARIANCE_REPORT_URL =
-  process.env.PLANNING_VARIANCE_REPORT_URL ||
-  "https://livec50a03.adaptiveplanning.com/adaptivepro/configuration/libraries/reports?src=%2Fmatrix-report-viewer%2F1506%2FM%3FreportId%3D1506%26reportType%3DM%26outputType%3DH%26reportKey%3Df56fb2b0-42cf-465b-b9e5-1fd455bc11ad";
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.9" };
 export const PROTOCOL_VERSION = "2024-11-05";
 
 function formatAlertAmount(value) {
@@ -155,6 +152,7 @@ async function handleToolCall(name, args = {}) {
     const planningResult = await writeExpenseTarget(value, ids);
     const result = await updateTarget(value);
     const analysis = await buildTargetUpdateAnalysis(planningResult, ids);
+    const varianceReport = await resolveExpenseAlertVarianceReportUrl();
 
     return textResult(
       [
@@ -163,10 +161,10 @@ async function handleToolCall(name, args = {}) {
         "Analysis:",
         analysis,
         "",
-        JSON.stringify({ planning: planningResult, sheet: result.result }),
+        JSON.stringify({ planning: planningResult, sheet: result.result, varianceReport }),
         "",
         "Here's a report that summarizes the changes in your scenario vs. the original plan.",
-        `[Expense Alert Variance](${EXPENSE_ALERT_VARIANCE_REPORT_URL})`,
+        `[Expense Alert Variance](${varianceReport.url})`,
       ].join("\n"),
     );
   }
