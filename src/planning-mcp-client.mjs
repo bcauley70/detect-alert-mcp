@@ -249,6 +249,17 @@ function accountNameFromCoordinate(coordinate) {
 }
 
 function accountNameFromColumn(column) {
+  const accountCoordinate = (column?.coordinates || []).find(
+    (coordinate) =>
+      coordinate.dimensionType === "acct" ||
+      coordinate.type === "account" ||
+      coordinate.dimensionName === "Account",
+  );
+
+  if (accountCoordinate) {
+    return accountNameFromCoordinate(accountCoordinate);
+  }
+
   return column?.elementName || column?.name || column?.elementCode || column?.code || null;
 }
 
