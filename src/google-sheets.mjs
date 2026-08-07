@@ -275,3 +275,26 @@ export async function setTrigger(accountName) {
     result: webAppResult,
   };
 }
+
+export async function setChecked(dateTime) {
+  const spreadsheetId =
+    process.env.GOOGLE_SPREADSHEET_ID || DEFAULT_SPREADSHEET_ID;
+  const range = process.env.GOOGLE_CHECKED_RANGE || "Checked";
+
+  const webAppResult = await callWebApp({
+    action: "set_checked",
+    value: dateTime,
+  });
+
+  if (webAppResult?.success === false) {
+    throw new Error(webAppResult.error || "Failed to update Checked in Google Sheet.");
+  }
+
+  return {
+    method: "webapp",
+    spreadsheetId,
+    range,
+    value: dateTime,
+    result: webAppResult,
+  };
+}

@@ -7,7 +7,7 @@ import {
   stopTriggerMonitor,
 } from "./trigger-monitor.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.0" };
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.1" };
 export const PROTOCOL_VERSION = "2024-11-05";
 
 const ALERT_MESSAGE = `Alert condition triggered - Expense Plan Exceeds Target
@@ -45,10 +45,10 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        Minutes: {
+        Seconds: {
           type: "number",
           description:
-            "Optional interval in minutes between checks. Uses the current interval when omitted.",
+            "Optional interval in seconds between checks. Uses the current interval when omitted.",
         },
       },
     },
@@ -65,16 +65,16 @@ const TOOLS = [
   {
     name: "set_check_interval",
     description:
-      "Set Check Interval. Adjusts how many minutes elapse between each Adaptive Planning trigger check.",
+      "Set Check Interval. Adjusts how many seconds elapse between each Adaptive Planning trigger check.",
     inputSchema: {
       type: "object",
       properties: {
-        Minutes: {
+        Seconds: {
           type: "number",
-          description: "The number of minutes between each trigger check.",
+          description: "The number of seconds between each trigger check.",
         },
       },
-      required: ["Minutes"],
+      required: ["Seconds"],
     },
   },
 ];
@@ -97,18 +97,18 @@ function readTargetValue(args) {
   return numericValue;
 }
 
-function readMinutes(args, { required = true } = {}) {
-  const value = args?.Minutes ?? args?.minutes;
+function readSeconds(args, { required = true } = {}) {
+  const value = args?.Seconds ?? args?.seconds;
   if (value === undefined || value === null || value === "") {
     if (!required) {
       return undefined;
     }
-    throw new Error("Minutes is required and must be a positive number.");
+    throw new Error("Seconds is required and must be a positive number.");
   }
 
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue) || numericValue <= 0) {
-    throw new Error("Minutes must be a positive number.");
+    throw new Error("Seconds must be a positive number.");
   }
 
   return numericValue;
@@ -130,13 +130,13 @@ async function handleToolCall(name, args = {}) {
   }
 
   if (name === "start_trigger_check") {
-    const minutes = readMinutes(args, { required: false });
+    const seconds = readSeconds(args, { required: false });
     const status = startTriggerMonitor(
-      minutes === undefined ? {} : { intervalMinutes: minutes },
+      seconds === undefined ? {} : { intervalSeconds: seconds },
     );
 
     return textResult(
-      `Trigger check started. Interval: ${status.intervalMinutes} minute(s).\n${JSON.stringify(status)}`,
+      `Trigger check started. Interval: ${status.intervalSeconds} second(s).\n${JSON.stringify(status)}`,
     );
   }
 
@@ -146,10 +146,10 @@ async function handleToolCall(name, args = {}) {
   }
 
   if (name === "set_check_interval") {
-    const minutes = readMinutes(args);
-    const status = setTriggerCheckInterval(minutes);
+    const seconds = readSeconds(args);
+    const status = setTriggerCheckInterval(seconds);
     return textResult(
-      `Trigger check interval set to ${status.intervalMinutes} minute(s).\n${JSON.stringify(status)}`,
+      `Trigger check interval set to ${status.intervalSeconds} second(s).\n${JSON.stringify(status)}`,
     );
   }
 

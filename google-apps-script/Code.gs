@@ -18,6 +18,26 @@ function doGet(e) {
   const value = e && e.parameter && e.parameter.value ? e.parameter.value : "1";
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
 
+  if (action === "set_checked") {
+    const checkedRange = spreadsheet.getRangeByName("Checked");
+
+    if (!checkedRange) {
+      return jsonResponse({
+        success: false,
+        error: "Named range Checked was not found.",
+      });
+    }
+
+    checkedRange.setValue(value);
+
+    return jsonResponse({
+      success: true,
+      action: "set_checked",
+      range: "Checked",
+      value: value,
+    });
+  }
+
   if (action === "set_trigger") {
     const triggerRange = spreadsheet.getRangeByName("Trigger");
 

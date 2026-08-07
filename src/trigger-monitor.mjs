@@ -1,11 +1,13 @@
-import { setTrigger } from "./google-sheets.mjs";
+import { setChecked, setTrigger } from "./google-sheets.mjs";
 import { findTriggeredChildAccounts, resolveTriggerQueryIds } from "./planning-mcp-client.mjs";
 
-const DEFAULT_INTERVAL_MINUTES = Number(process.env.TRIGGER_CHECK_INTERVAL_MINUTES || 1);
+const DEFAULT_INTERVAL_SECONDS = Number(
+  process.env.TRIGGER_CHECK_INTERVAL_SECONDS || 60,
+);
 
 const state = {
   enabled: false,
-  intervalMinutes: DEFAULT_INTERVAL_MINUTES,
+  intervalSeconds: DEFAULT_INTERVAL_SECONDS,
   timer: null,
   running: false,
   lastCheckAt: null,
@@ -14,13 +16,25 @@ const state = {
   lastResult: null,
 };
 
-function minutesToMs(minutes) {
-  const parsed = Number(minutes);
+function secondsToMs(seconds) {
+  const parsed = Number(seconds);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error("Minutes must be a positive number.");
+    throw new Error("Seconds must be a positive number.");
   }
 
-  return parsed * 60 * 1000;
+  return parsed * 1000;
+}
+
+function formatCheckedTimestamp(date = new Date()) {
+  return date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  });
 }
 
 function scheduleNextTick() {
@@ -38,13 +52,13 @@ function scheduleNextTick() {
       state.lastError = error instanceof Error ? error.message : String(error);
       process.stderr.write(`[trigger-monitor] ${state.lastError}\n`);
     });
-  }, minutesToMs(state.intervalMinutes));
+  }, secondsToMs(state.intervalSeconds));
 }
 
 export function getTriggerMonitorStatus() {
   return {
     enabled: state.enabled,
-    intervalMinutes: state.intervalMinutes,
+    intervalSeconds: state.intervalSeconds,
     running: state.running,
     lastCheckAt: state.lastCheckAt,
     lastError: state.lastError,
@@ -67,6 +81,8 @@ export async function runTriggerCheck() {
   state.lastError = null;
 
   try {
+    await setChecked(formatCheckedTimestamp());
+
     const ids = await resolveTriggerQueryIds();
     const triggeredAccounts = await findTriggeredChildAccounts(ids);
 
@@ -103,9 +119,9 @@ export async function runTriggerCheck() {
   }
 }
 
-export function startTriggerMonitor({ intervalMinutes } = {}) {
-  if (intervalMinutes !== undefined) {
-    setTriggerCheckInterval(intervalMinutes);
+export function startTriggerMonitor({ intervalSeconds } = {}) {
+  if (intervalSeconds !== undefined) {
+    setTriggerCheckInterval(intervalSeconds);
   }
 
   state.enabled = true;
@@ -129,13 +145,13 @@ export function stopTriggerMonitor() {
   return getTriggerMonitorStatus();
 }
 
-export function setTriggerCheckInterval(minutes) {
-  const parsed = Number(minutes);
+export function setTriggerCheckInterval(seconds) {
+  const parsed = Number(seconds);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error("Minutes must be a positive number.");
+    throw new Error("Seconds must be a positive number.");
   }
 
-  state.intervalMinutes = parsed;
+  state.intervalSeconds = parsed;
   if (state.enabled) {
     scheduleNextTick();
   }
