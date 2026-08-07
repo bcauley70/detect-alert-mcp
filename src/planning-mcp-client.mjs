@@ -11,12 +11,28 @@ function planningConfig() {
 }
 
 function parseMcpResponse(text) {
-  const dataLine = text.split("\n").find((line) => line.startsWith("data:"));
-  if (dataLine) {
-    return JSON.parse(dataLine.slice(5).trim());
+  const dataLines = text
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim())
+    .filter(Boolean);
+
+  for (let index = dataLines.length - 1; index >= 0; index -= 1) {
+    try {
+      const payload = JSON.parse(dataLines[index]);
+      if (payload.result !== undefined || payload.error !== undefined) {
+        return payload;
+      }
+    } catch {
+      // Try the previous data line.
+    }
   }
 
-  return JSON.parse(text);
+  if (dataLines.length === 0) {
+    return JSON.parse(text);
+  }
+
+  return JSON.parse(dataLines[dataLines.length - 1]);
 }
 
 function toolText(result) {
