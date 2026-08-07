@@ -1,5 +1,9 @@
-import { setInProgress, updateTarget } from "./google-sheets.mjs";
-import { resolveTargetWriteIds, writeExpenseTarget } from "./planning-mcp-client.mjs";
+import { getTrigger, setInProgress, updateTarget } from "./google-sheets.mjs";
+import {
+  fetchAlertAccountValues,
+  resolveTargetWriteIds,
+  writeExpenseTarget,
+} from "./planning-mcp-client.mjs";
 import {
   getTriggerMonitorStatus,
   runTriggerCheck,
@@ -8,17 +12,28 @@ import {
   stopTriggerMonitor,
 } from "./trigger-monitor.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.3" };
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.4" };
 export const PROTOCOL_VERSION = "2024-11-05";
 
-const ALERT_MESSAGE = `Alert condition triggered - Expense Plan Exceeds Target
-The current target is 46.400,000. Would you like to adjust the target?`;
+function formatAlertAmount(value) {
+  return Math.round(Number(value)).toLocaleString("en-US");
+}
+
+async function buildAlertMessage(triggerValue) {
+  const { operatingExpenses, expenseTarget } = await fetchAlertAccountValues();
+
+  return [
+    `Alert condition triggered - ${triggerValue}`,
+    `The current plan is ${formatAlertAmount(operatingExpenses)} against a plan of ${formatAlertAmount(expenseTarget)}`,
+    "Would you like to adjust the target?",
+  ].join("\n");
+}
 
 const TOOLS = [
   {
     name: "get_alert_message",
     description:
-      "Get Alert Message. Sets the Google Sheet InProgress range to 1 and returns the expense-plan alert text.",
+      "Get Alert Message. Reads the Trigger named range, sets InProgress to 1, queries Adaptive Planning for 6000_Operating_Expenses and Expense_Target at Scenario 1 / Total Company / FY2027, and returns the alert text.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -117,8 +132,16 @@ function readSeconds(args, { required = true } = {}) {
 
 async function handleToolCall(name, args = {}) {
   if (name === "get_alert_message") {
+    const trigger = await getTrigger();
+    const triggerValue = trigger.value;
+
+    if (triggerValue === null || triggerValue === undefined || triggerValue === "") {
+      throw new Error("Trigger named range is empty.");
+    }
+
     await setInProgress(1);
-    return textResult(ALERT_MESSAGE);
+    const message = await buildAlertMessage(String(triggerValue));
+    return textResult(message);
   }
 
   if (name === "update_target") {
@@ -176,7 +199,7 @@ export async function handleRequest(message) {
         },
         serverInfo: SERVER_INFO,
         instructions:
-          "Detect & Alert monitors planning conditions. Use get_alert_message when an expense-plan alert should be raised. Use update_target to prorate a new annual target across monthly Expense_Target values in Adaptive Planning and clear Trigger and InProgress in the Google Sheet. Use start_trigger_check, stop_trigger_check, and set_check_interval to control the periodic Adaptive Planning monitor.",
+          "Detect & Alert monitors planning conditions. Use get_alert_message when an expense-plan alert should be raised; it reads Trigger from the Google Sheet and current plan/target values from Adaptive Planning. Use update_target to prorate a new annual target across monthly Expense_Target values in Adaptive Planning and clear Trigger and InProgress in the Google Sheet. Use start_trigger_check, stop_trigger_check, and set_check_interval to control the periodic Adaptive Planning monitor.",
       },
     };
   }

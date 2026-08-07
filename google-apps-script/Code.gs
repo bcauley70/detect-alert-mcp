@@ -58,6 +58,26 @@ function doGet(e) {
     });
   }
 
+  if (action === "get_trigger") {
+    const triggerRange = spreadsheet.getRangeByName("Trigger");
+
+    if (!triggerRange) {
+      return jsonResponse({
+        success: false,
+        error: "Named range Trigger was not found.",
+      });
+    }
+
+    const triggerValue = triggerRange.getValue();
+
+    return jsonResponse({
+      success: true,
+      action: "get_trigger",
+      range: "Trigger",
+      value: triggerValue === "" ? null : triggerValue,
+    });
+  }
+
   if (action === "update_target") {
     const targetRange = spreadsheet.getRangeByName("Target");
     const triggerRange = spreadsheet.getRangeByName("Trigger");

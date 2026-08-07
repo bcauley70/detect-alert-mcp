@@ -253,6 +253,26 @@ export async function updateTarget(value) {
   };
 }
 
+export async function getTrigger() {
+  const spreadsheetId =
+    process.env.GOOGLE_SPREADSHEET_ID || DEFAULT_SPREADSHEET_ID;
+  const range = process.env.GOOGLE_TRIGGER_RANGE || "Trigger";
+
+  const webAppResult = await callWebApp({ action: "get_trigger" });
+
+  if (webAppResult?.success === false) {
+    throw new Error(webAppResult.error || "Failed to read Trigger from Google Sheet.");
+  }
+
+  return {
+    method: "webapp",
+    spreadsheetId,
+    range,
+    value: webAppResult?.value ?? null,
+    result: webAppResult,
+  };
+}
+
 export async function setTrigger(accountName) {
   const spreadsheetId =
     process.env.GOOGLE_SPREADSHEET_ID || DEFAULT_SPREADSHEET_ID;

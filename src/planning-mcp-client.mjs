@@ -612,6 +612,149 @@ function accountNameFromCoordinate(coordinate) {
   );
 }
 
+export function extractAccountValuesById(reportData, accountIdsByKey) {
+  const columns = reportData?.columns || [];
+  const row = reportData?.rows?.[0];
+  const values = {};
+
+  for (const key of Object.keys(accountIdsByKey)) {
+    values[key] = null;
+  }
+
+  if (!row) {
+    return values;
+  }
+
+  for (const cell of row.cells || []) {
+    const column = Number.isInteger(cell.colIndex) ? columns[cell.colIndex] : null;
+    const accountCoordinate = (column?.coordinates || []).find(
+      (coordinate) => coordinate.dimensionType === "acct",
+    );
+    const accountId = accountCoordinate?.elementId
+      ? String(accountCoordinate.elementId)
+      : null;
+
+    if (!accountId) {
+      continue;
+    }
+
+    for (const [key, expectedId] of Object.entries(accountIdsByKey)) {
+      if (String(expectedId) === accountId) {
+        values[key] = parseNumericValue(cell.value ?? cell.formatted);
+      }
+    }
+  }
+
+  return values;
+}
+
+export async function fetchAlertAccountValues({
+  operatingExpensesAccount =
+    process.env.PLANNING_OPERATING_EXPENSES_ACCOUNT || "6000_Operating_Expenses",
+  targetAccount = process.env.PLANNING_TARGET_ACCOUNT || "Expense_Target",
+  version = process.env.PLANNING_VERSION || "Scenario 1",
+  time = process.env.PLANNING_TIME || "FY2027",
+  level = process.env.PLANNING_LEVEL || "Total Company",
+} = {}) {
+  const searchResults = await searchPlanningMetadata([
+    operatingExpensesAccount,
+    targetAccount,
+    version,
+    time,
+    level,
+  ]);
+
+  const operatingMatch = findMetadataMatch(searchResults, operatingExpensesAccount, 2);
+  const targetMatch = findMetadataMatch(searchResults, targetAccount, 2);
+  const versionId = findVersionOrScenarioId(searchResults, version);
+  const timeId = findMetadataId(searchResults, time, 3);
+  const levelId = findMetadataId(searchResults, level, 1);
+
+  const missing = [
+    ["operatingExpensesAccount", operatingExpensesAccount, operatingMatch?.id],
+    ["targetAccount", targetAccount, targetMatch?.id],
+    ["versionOrScenario", version, versionId],
+    ["time", time, timeId],
+    ["level", level, levelId],
+  ]
+    .filter(([, , id]) => !id)
+    .map(([key]) => key);
+
+  if (missing.length > 0) {
+    throw new Error(`Could not resolve planning metadata for alert query: ${missing.join(", ")}`);
+  }
+
+  const result = await callPlanningTool("data-dimensional-query", {
+    request: {
+      options: {
+        suppressZeroes: 0,
+        includeLabels: true,
+        includeElementCode: true,
+      },
+      axes: [
+        {
+          type: "X",
+          segments: [
+            {
+              tiers: [
+                {
+                  type: "account",
+                  elements: [
+                    { id: String(operatingMatch.id) },
+                    { id: String(targetMatch.id) },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "Y",
+          segments: [
+            {
+              tiers: [
+                {
+                  type: "time",
+                  elements: [{ id: String(timeId) }],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "FILTER",
+          segments: [
+            {
+              tiers: [
+                {
+                  type: "version",
+                  elements: [{ id: String(versionId) }],
+                },
+                {
+                  type: "level",
+                  elements: [{ id: String(levelId) }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  const payload = parsePlanningQueryPayload(toolText(result));
+  const reportData = payload?.reportData || payload;
+  const values = extractAccountValuesById(reportData, {
+    operatingExpenses: operatingMatch.id,
+    expenseTarget: targetMatch.id,
+  });
+
+  return {
+    operatingExpenses: values.operatingExpenses ?? 0,
+    expenseTarget: values.expenseTarget ?? 0,
+  };
+}
+
 function accountNameFromColumn(column) {
   const accountCoordinate = (column?.coordinates || []).find(
     (coordinate) =>
