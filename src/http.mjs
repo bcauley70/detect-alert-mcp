@@ -1,11 +1,13 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import {
+  getTriggerMonitorStatus,
   handleRequest,
   isJsonRpcNotification,
   isJsonRpcRequest,
   SERVER_INFO,
 } from "./core.mjs";
+import { maybeAutostartTriggerMonitor } from "./trigger-monitor.mjs";
 
 const MCP_PATH = process.env.MCP_PATH || "/mcp";
 const PORT = Number(process.env.PORT || 3001);
@@ -135,6 +137,7 @@ function handleHealth(_req, res) {
     version: SERVER_INFO.version,
     transport: "streamable-http",
     endpoint: MCP_PATH,
+    triggerMonitor: getTriggerMonitorStatus(),
   });
 }
 
@@ -207,6 +210,8 @@ export async function startHttpServer() {
   process.stderr.write(
     `Detect & Alert HTTP server listening on http://${HOST}:${PORT}${MCP_PATH}${authNote}\n`,
   );
+
+  maybeAutostartTriggerMonitor();
 
   return server;
 }

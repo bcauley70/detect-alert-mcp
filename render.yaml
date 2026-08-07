@@ -13,3 +13,9 @@ services:
         generateValue: true
       - key: GOOGLE_SHEETS_WEBAPP_URL
         value: https://script.google.com/macros/s/AKfycbwRZlRSwHfwHUu_NrYQNeh6XOphstn5EJ-Rh9dqC6rj_fHW1t7CIqWJeSKAeUpWsxZT/exec
+      - key: PLANNING_MCP_URL
+        value: https://workday-planning-mcp.onrender.com/mcp
+      - key: PLANNING_MCP_API_KEY
+        value: klWMOkQ9F4deCBmG4LIw8+0E5H5jNZI0vhaACzGo+/U=
+      - key: TRIGGER_CHECK_INTERVAL_MINUTES
+        value: "1"

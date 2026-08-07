@@ -1,6 +1,13 @@
 import { setInProgress, updateTarget } from "./google-sheets.mjs";
+import {
+  getTriggerMonitorStatus,
+  runTriggerCheck,
+  setTriggerCheckInterval,
+  startTriggerMonitor,
+  stopTriggerMonitor,
+} from "./trigger-monitor.mjs";
 
-export const SERVER_INFO = { name: "Detect & Alert", version: "1.1.0" };
+export const SERVER_INFO = { name: "Detect & Alert", version: "1.2.0" };
 export const PROTOCOL_VERSION = "2024-11-05";
 
 const ALERT_MESSAGE = `Alert condition triggered - Expense Plan Exceeds Target
@@ -31,6 +38,45 @@ const TOOLS = [
       required: ["Value"],
     },
   },
+  {
+    name: "start_trigger_check",
+    description:
+      "Start Trigger Check. Enables the periodic Adaptive Planning monitor that checks child accounts of Detect_and_Alert_Triggers and writes non-zero account names to the Trigger range.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        Minutes: {
+          type: "number",
+          description:
+            "Optional interval in minutes between checks. Uses the current interval when omitted.",
+        },
+      },
+    },
+  },
+  {
+    name: "stop_trigger_check",
+    description:
+      "Stop Trigger Check. Disables the periodic Adaptive Planning monitor.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "set_check_interval",
+    description:
+      "Set Check Interval. Adjusts how many minutes elapse between each Adaptive Planning trigger check.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        Minutes: {
+          type: "number",
+          description: "The number of minutes between each trigger check.",
+        },
+      },
+      required: ["Minutes"],
+    },
+  },
 ];
 
 function textResult(text) {
@@ -51,6 +97,23 @@ function readTargetValue(args) {
   return numericValue;
 }
 
+function readMinutes(args, { required = true } = {}) {
+  const value = args?.Minutes ?? args?.minutes;
+  if (value === undefined || value === null || value === "") {
+    if (!required) {
+      return undefined;
+    }
+    throw new Error("Minutes is required and must be a positive number.");
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    throw new Error("Minutes must be a positive number.");
+  }
+
+  return numericValue;
+}
+
 async function handleToolCall(name, args = {}) {
   if (name === "get_alert_message") {
     await setInProgress(1);
@@ -63,6 +126,30 @@ async function handleToolCall(name, args = {}) {
 
     return textResult(
       `Target updated to ${value}. Cleared Trigger and InProgress.\n${JSON.stringify(result.result)}`,
+    );
+  }
+
+  if (name === "start_trigger_check") {
+    const minutes = readMinutes(args, { required: false });
+    const status = startTriggerMonitor(
+      minutes === undefined ? {} : { intervalMinutes: minutes },
+    );
+
+    return textResult(
+      `Trigger check started. Interval: ${status.intervalMinutes} minute(s).\n${JSON.stringify(status)}`,
+    );
+  }
+
+  if (name === "stop_trigger_check") {
+    const status = stopTriggerMonitor();
+    return textResult(`Trigger check stopped.\n${JSON.stringify(status)}`);
+  }
+
+  if (name === "set_check_interval") {
+    const minutes = readMinutes(args);
+    const status = setTriggerCheckInterval(minutes);
+    return textResult(
+      `Trigger check interval set to ${status.intervalMinutes} minute(s).\n${JSON.stringify(status)}`,
     );
   }
 
@@ -86,7 +173,7 @@ export async function handleRequest(message) {
         },
         serverInfo: SERVER_INFO,
         instructions:
-          "Detect & Alert monitors planning conditions. Use get_alert_message when an expense-plan alert should be raised. Use update_target to set a new target value and clear Trigger and InProgress.",
+          "Detect & Alert monitors planning conditions. Use get_alert_message when an expense-plan alert should be raised. Use update_target to set a new target value and clear Trigger and InProgress. Use start_trigger_check, stop_trigger_check, and set_check_interval to control the periodic Adaptive Planning monitor.",
       },
     };
   }
@@ -164,3 +251,5 @@ export function isJsonRpcNotification(message) {
     message.id === undefined
   );
 }
+
+export { getTriggerMonitorStatus, runTriggerCheck };

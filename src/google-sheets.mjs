@@ -252,3 +252,26 @@ export async function updateTarget(value) {
     result: webAppResult,
   };
 }
+
+export async function setTrigger(accountName) {
+  const spreadsheetId =
+    process.env.GOOGLE_SPREADSHEET_ID || DEFAULT_SPREADSHEET_ID;
+  const range = process.env.GOOGLE_TRIGGER_RANGE || "Trigger";
+
+  const webAppResult = await callWebApp({
+    action: "set_trigger",
+    value: accountName,
+  });
+
+  if (webAppResult?.success === false) {
+    throw new Error(webAppResult.error || "Failed to update Trigger in Google Sheet.");
+  }
+
+  return {
+    method: "webapp",
+    spreadsheetId,
+    range,
+    value: accountName,
+    result: webAppResult,
+  };
+}

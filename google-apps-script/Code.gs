@@ -18,6 +18,26 @@ function doGet(e) {
   const value = e && e.parameter && e.parameter.value ? e.parameter.value : "1";
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
 
+  if (action === "set_trigger") {
+    const triggerRange = spreadsheet.getRangeByName("Trigger");
+
+    if (!triggerRange) {
+      return jsonResponse({
+        success: false,
+        error: "Named range Trigger was not found.",
+      });
+    }
+
+    triggerRange.setValue(value);
+
+    return jsonResponse({
+      success: true,
+      action: "set_trigger",
+      range: "Trigger",
+      value: value,
+    });
+  }
+
   if (action === "update_target") {
     const targetRange = spreadsheet.getRangeByName("Target");
     const triggerRange = spreadsheet.getRangeByName("Trigger");
